@@ -1,163 +1,54 @@
 const express = require('express');
-const zlib = require('zlib');
-const fs = require('fs');
-const path = require('path');
-
 const app = express();
-app.use(express.json({ limit: '20kb' }));
-const HTML = "<!DOCTYPE html>\n<html lang=\"vi\"><head><meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n<title>Genie đoán nhân vật</title>\n<style>\n:root{--bg1:#120a2e;--bg2:#2a1260;--gold:#ffc94d;--ink:#f6f3ff;--mut:#b4a9e0;--line:#ffffff26;--glass:#ffffff12}\n@media(prefers-color-scheme:light){:root{--bg1:#120a2e;--bg2:#2a1260}}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\nhtml,body{min-height:100%;margin:0}\nbody{background:radial-gradient(800px 500px at 50% -10%,#7a3fff55,transparent),linear-gradient(170deg,var(--bg1),var(--bg2));color:var(--ink);font:16px/1.45 \"Be Vietnam Pro\",system-ui,-apple-system,sans-serif;padding:env(safe-area-inset-top) 14px calc(24px + env(safe-area-inset-bottom));background-attachment:fixed}\nmain{max-width:480px;margin:0 auto;text-align:center}\nh1{margin:14px 0 0;font-size:24px;letter-spacing:-.01em}\n.sub{color:var(--mut);font-size:14px}\n#genie{font-size:92px;line-height:1;margin:6px 0;filter:drop-shadow(0 0 28px #8a5cff);animation:fl 3s ease-in-out infinite}\n@keyframes fl{50%{transform:translateY(-10px) rotate(-3deg)}}\n.card{background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:18px;backdrop-filter:blur(10px)}\n.q{font-size:20px;font-weight:700;min-height:84px;display:grid;place-items:center;margin:6px 0 14px}\nbutton{font:inherit;color:inherit;border:1px solid var(--line);background:#ffffff14;border-radius:14px;padding:13px;cursor:pointer;width:100%;margin-top:8px;transition:transform .1s,background .15s}\nbutton:active{transform:scale(.97)}button:hover{background:#ffffff26}\n.yes{background:linear-gradient(135deg,#7c5cff,#4f8bff);border:0;font-weight:700}\n.no{background:linear-gradient(135deg,#ff5d7a,#ff8a5c);border:0;font-weight:700}\n.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.row button{margin-top:8px}\n.bar{height:7px;border-radius:5px;background:#ffffff1f;overflow:hidden;margin:4px 0 12px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#27e0b5,var(--gold));transition:width .4s}\n.big{font-size:70px;margin:4px 0}\n.nm{font-size:26px;font-weight:800;color:var(--gold)}\ninput{width:100%;padding:13px;border-radius:12px;border:1px solid var(--line);background:#0004;color:var(--ink);font:inherit;outline:0;margin-top:8px}\n.link{background:none;border:0;color:var(--mut);font-size:14px;width:auto;margin:10px auto 0;display:block}\n.mut{color:var(--mut);font-size:13px}\n</style></head><body><main>\n<h1>🔮 Genie đoán nhân vật</h1>\n<div class=\"sub\">Hãy nghĩ đến một nhân vật, mình sẽ đoán ra!</div>\n<div id=\"genie\">🧞</div>\n<div class=\"card\" id=\"s\"></div>\n<div class=\"mut\" id=\"foot\" style=\"margin-top:12px\"></div>\n</main>\n<script>\nconst Q=[['real','Nhân vật này là người thật (không phải hư cấu)?'],['male','Nhân vật là nam?'],['vn','Là người Việt Nam hoặc gắn với Việt Nam?'],['alive','Hiện giờ vẫn còn sống?'],['sing','Là ca sĩ hoặc nhạc sĩ?'],['act','Là diễn viên hoặc người nổi tiếng trên màn ảnh?'],['sport','Liên quan đến thể thao?'],['football','Chơi bóng đá?'],['pol','Là lãnh đạo, chính trị gia hoặc tướng lĩnh trong lịch sử?'],['sci','Là nhà khoa học, nhà phát minh hoặc doanh nhân công nghệ?'],['write','Là nhà văn hoặc nhà thơ?'],['anime','Xuất hiện trong anime/manga?'],['cartoon','Là nhân vật hoạt hình phương Tây (Disney, Pixar, Nickelodeon…)?'],['movie','Xuất hiện trong phim điện ảnh?'],['game','Xuất hiện trong trò chơi điện tử?'],['super','Có siêu năng lực hoặc phép thuật?'],['animal','Là động vật hoặc sinh vật không phải người?'],['evil','Là nhân vật phản diện / xấu xa?'],['hero','Là anh hùng, người tốt đi cứu người khác?'],['kid','Là trẻ em hoặc trông như trẻ em?'],['glass','Đeo kính?'],['hat','Thường đội mũ?'],['mask','Mặc trang phục hoặc đeo mặt nạ đặc biệt?'],['blackhair','Tóc đen?'],['blond','Tóc vàng?'],['bald','Hói hoặc không có tóc?'],['mcu','Thuộc vũ trụ siêu anh hùng Marvel hoặc DC?'],['robot','Là robot hoặc người máy?'],['princess','Là công chúa, hoàng tử hoặc hoàng gia?'],['detect','Liên quan đến phá án, thám tử?'],['war','Gắn với chiến tranh hoặc quân sự?'],['tech','Gắn với một công ty công nghệ nổi tiếng?']];\nconst LQ=Object.fromEntries(Q);Object.assign(LQ,{female:'Là nữ?',dead:'Đã qua đời?',fame:'Rất nổi tiếng trên khắp thế giới?'});\nfunction qtext(t){if(LQ[t])return LQ[t];const i=t.indexOf(':');if(i<0)return null;const k=t.slice(0,i),v=t.slice(i+1);\n return({occ:`Là ${v}?`,c:`Mang quốc tịch ${v}?`,b:`Sinh trong thập niên ${v}?`,bc:`Sinh vào thế kỷ ${v}?`,k:`Là nhân vật ${v}?`,u:`Thuộc vũ trụ / thương hiệu «${v}»?`,w:`Xuất hiện trong «${v}»?`})[k]||null}\nlet ENT=[],TAGS={},TL=[],P,asked,ans,hist,wrong,info={};\nconst $=s=>document.querySelector(s),sc=$('#s'),W=[1,.75,.5,.25,0];\nasync function load(){\n  sc.innerHTML='<div class=\"q\">Đang gọi Genie…</div>';\n  try{const r=await fetch('/api/data');info=await r.json();ENT=info.d.map(x=>({n:x[0],e:x[1],t:x[2].split('|'),s:x[3]}))}\n  catch{sc.innerHTML='<div class=\"q\">Không kết nối được máy chủ.</div><button class=\"yes\" onclick=\"load()\">Thử lại</button>';return}\n  TAGS={};ENT.forEach((x,i)=>x.t.forEach(t=>(TAGS[t]=TAGS[t]||[]).push(i)));\n  const mn=ENT.length<300?1:5;\n  TL=Object.keys(TAGS).filter(t=>TAGS[t].length>=mn&&TAGS[t].length<=ENT.length-mn&&qtext(t));\n  $('#foot').textContent=`Genie biết ${ENT.length} nhân vật`+(info.ready?'':' · '+info.status+' — tải lại trang sau vài phút để có nhiều hơn');\n  start();\n}\nfunction norm(){let t=0;for(const p of P)t+=p;if(t>0)for(let i=0;i<P.length;i++)P[i]/=t;return t}\nfunction start(){P=new Float64Array(ENT.length);ENT.forEach((x,i)=>P[i]=1+Math.log(1+(x.s||1)));asked=[];ans={};hist=[];wrong=0;norm();$('#genie').textContent='🧞';step()}\nfunction best(){let b=null,bd=.48;for(const t of TL){if(ans[t]!==undefined)continue;let y=0;for(const i of TAGS[t])y+=P[i];const d=Math.abs(y-.5)+Math.random()*.03;if(d<bd){bd=d;b=t}}return b}\nfunction argmax(){let m=0;for(let i=1;i<P.length;i++)if(P[i]>P[m])m=i;return m}\nfunction step(){\n  const top=argmax(),mx=P[top],n=asked.length,q=best();\n  if(!(mx>0))return learn();\n  if((mx>=.8&&n>=5)||n>=30||!q)return guess(top);\n  sc.innerHTML=`<div class=\"mut\">Câu ${n+1}</div><div class=\"bar\"><i style=\"width:${Math.min(100,mx*100)}%\"></i></div>\n  <div class=\"q\">${qtext(q)}</div>\n  <button class=\"yes\" data-a=\"0\">Có</button>\n  <div class=\"row\"><button data-a=\"1\">Chắc là có</button><button data-a=\"3\">Chắc là không</button></div>\n  <button data-a=\"2\">Không biết</button><button class=\"no\" data-a=\"4\">Không</button>\n  ${n?'<button class=\"link\" id=\"undo\">↶ Quay lại</button>':''}`;\n  sc.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answer(q,W[+b.dataset.a]));\n  const u=$('#undo');if(u)u.onclick=()=>{const h=hist.pop();P=h.P;asked=h.asked;ans=h.ans;step()};\n  $('#genie').textContent=mx>.4?'🧞‍♂️':'🧞';\n}\nfunction answer(q,a){\n  hist.push({P:Float64Array.from(P),asked:[...asked],ans:{...ans}});asked.push(q);ans[q]=a;\n  if(a!==.5){const fy=.04+.92*a,fn=.04+.92*(1-a),r=fy/fn;for(let i=0;i<P.length;i++)P[i]*=fn;for(const i of TAGS[q])P[i]*=r}\n  norm();step();\n}\nfunction guess(i){\n  const x=ENT[i];\n  sc.innerHTML=`<div class=\"mut\">Mình nghĩ là…</div><div class=\"big\">${x.e}</div><div class=\"nm\"></div>\n  <div class=\"mut\" style=\"margin:6px 0 4px\">Mình đoán sau ${asked.length} câu hỏi</div>\n  <button class=\"yes\" id=\"ok\">✅ Đúng rồi!</button><button class=\"no\" id=\"ko\">❌ Không phải</button>`;\n  sc.querySelector('.nm').textContent=x.n;\n  $('#ok').onclick=()=>{$('#genie').textContent='🥳';sc.innerHTML=`<div class=\"big\">🎉</div><div class=\"nm\"></div><div class=\"mut\" style=\"margin:8px 0\">Mình đoán đúng sau ${asked.length} câu!</div><button class=\"yes\" id=\"again\">Chơi lại</button>`;sc.querySelector('.nm').textContent=x.n;$('#again').onclick=start};\n  $('#ko').onclick=()=>{wrong++;P[i]=0;if(wrong>=3||norm()<=0)learn();else{$('#genie').textContent='🤔';step()}};\n}\nfunction learn(){\n  $('#genie').textContent='😅';\n  sc.innerHTML=`<div class=\"nm\" style=\"font-size:22px\">Mình chịu thua!</div><div class=\"mut\" style=\"margin:6px 0\">Bạn đang nghĩ đến ai? Dạy mình để lần sau mọi người đều được đoán đúng.</div>\n  <input id=\"nn\" placeholder=\"Tên nhân vật\" maxlength=\"40\"><button class=\"yes\" id=\"teach\">Dạy cho Genie</button><button class=\"link\" id=\"skip\">Bỏ qua, chơi lại</button>`;\n  $('#teach').onclick=async()=>{const v=$('#nn').value.trim();if(!v)return;\n    const tags=Object.keys(ans).filter(k=>ans[k]>=.75);\n    try{await fetch('/api/learn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:v,tags})})}catch{}\n    load()};\n  $('#skip').onclick=start;\n}\nload();\n</script></body></html>";
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '300kb' }));
 
-/* ============ Dữ liệu ============ */
-// Dữ liệu dự phòng (dùng khi chưa tải được Wikidata)
-const BASE = [
-['Hồ Chí Minh','👴','real male vn pol'],['Sơn Tùng M-TP','🎤','real male vn alive sing'],['Messi','⚽','real male alive sport football'],
-['Cristiano Ronaldo','🏆','real male alive sport football blackhair'],['Nguyễn Quang Hải','🇻🇳','real male vn alive sport football blackhair'],
-['Michael Jackson','🕺','real male sing hat blackhair'],['Albert Einstein','🧠','real male sci'],['Elon Musk','🚀','real male alive sci tech'],
-['Bill Gates','💻','real male alive sci glass tech'],['Taylor Swift','🎸','real alive sing blond'],['Jackie Chan','🥋','real male alive act'],
-['Bruce Lee','🥊','real male act sport'],['Charlie Chaplin','🎩','real male act hat'],['Trấn Thành','🎬','real male vn alive act'],
-['Mỹ Tâm','🎶','real vn alive sing'],['Nguyễn Du','📜','real male vn write'],['Trần Hưng Đạo','⚔️','real male vn pol war'],
-['Napoleon','👑','real male pol hat war'],['Marilyn Monroe','💋','real act blond'],['LeBron James','🏀','real male alive sport'],
-['Stephen Hawking','🌌','real male sci glass'],['Steve Jobs','🍎','real male sci glass tech'],
-['Doraemon','🤖','anime robot super hero'],['Nobita','👓','anime male kid glass'],['Son Goku','🐉','anime male super hero blackhair'],
-['Naruto','🍥','anime male super hero blond'],['Luffy','🏴‍☠️','anime male super hero hat blackhair'],['Pikachu','⚡','anime game animal super hero'],
-['Conan Edogawa','🔍','anime male kid glass detect hero'],['Shin cậu bé bút chì','✏️','anime male kid blackhair'],
-['Spider-Man','🕷️','movie male super hero mask mcu'],['Iron Man','🦾','movie male hero mask mcu sci'],['Batman','🦇','movie male hero mask mcu blackhair'],
-['Superman','🦸','movie male super hero mask mcu blackhair'],['Thor','🔨','movie male super hero mcu blond'],['Wonder Woman','🛡️','movie super hero mask mcu princess blackhair'],
-['Joker','🃏','movie male evil mcu'],['Harry Potter','⚡','movie male super glass kid hero blackhair'],['Voldemort','🐍','movie male super evil bald'],
-['Darth Vader','🌑','movie male evil mask super war'],['Sherlock Holmes','🕵️','movie male detect hat hero'],['Shrek','👹','cartoon movie male hero bald'],
-['Elsa','❄️','cartoon movie princess super blond'],['Mickey Mouse','🐭','cartoon animal male hero'],['SpongeBob','🧽','cartoon male'],
-['Mario','🍄','game male hat hero'],['Sonic','💨','game animal super hero'],['Thánh Gióng','🐎','vn male super hero kid']];
-const CACHE = path.join(__dirname, 'cache.json');
-const LFILE = path.join(__dirname, 'learned.json');
-const UA = 'AkinatorVN/1.0 (Render app; ' + (process.env.CONTACT || 'contact: set CONTACT env') + ')';
+const HTML = "<!DOCTYPE html>\n<html lang=\"vi\"><head><meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n<title>LGPT</title>\n<style>\n:root{--bg:#0e1116;--p:#171b22;--ink:#e8ecf3;--mut:#8b94a7;--line:#262c38;--acc:#4f8bff;--acc2:#7c5cff;--ok:#27c59a}\n@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--p:#fff;--ink:#14181f;--mut:#667085;--line:#e3e6ee}}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\nhtml,body{height:100%;margin:0}\nbody{background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,\"Segoe UI\",sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}\nheader{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--p)}\nheader b{font-size:19px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}\n#rem{flex:1;color:var(--mut);font-size:13px}\nbutton{font:inherit;color:inherit;background:var(--p);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer}\nbutton.pri{background:linear-gradient(135deg,var(--acc),var(--acc2));border:0;color:#fff;font-weight:600}\n#msgs{flex:1;overflow-y:auto;padding:14px;max-width:760px;width:100%;margin:0 auto}\n.m{margin:0 0 16px;display:flex;flex-direction:column}\n.m.u{align-items:flex-end}\n.b{max-width:92%;padding:10px 14px;border-radius:16px;overflow-wrap:anywhere}\n.u .b{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;white-space:pre-wrap}\n.a .b{background:var(--p);border:1px solid var(--line);width:100%}\n.b a{color:var(--acc)}.u .b a{color:#fff}\npre{position:relative;background:#0b0e13;color:#e6edf3;border-radius:12px;padding:12px;overflow-x:auto;font:13px/1.5 ui-monospace,Menlo,monospace;margin:8px 0}\npre button{position:absolute;right:6px;top:6px;font-size:12px;padding:3px 8px;background:#ffffff1f;border:0;color:#fff}\ncode.i{background:#8883;padding:1px 5px;border-radius:5px;font-size:.9em}\n.svg{background:#fff;border-radius:12px;padding:6px;text-align:center;margin:8px 0}.svg img{max-width:100%;height:auto}\n.chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.chips button{font-size:13px;padding:6px 10px}\nform{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--p);max-width:100%}\ntextarea{flex:1;resize:none;max-height:140px;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font:inherit;padding:10px 12px;outline:0}\n.ov{position:fixed;inset:0;background:#000a;display:grid;place-items:center;padding:18px;z-index:9}\n.ov>div{background:var(--p);border:1px solid var(--line);border-radius:18px;padding:18px;max-width:380px;width:100%}\n.hide{display:none!important}\n.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--mut);margin:0 2px;animation:b 1s infinite}.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}\n@keyframes b{50%{transform:translateY(-5px)}}\n</style></head><body>\n<header><b>LGPT</b><span id=\"rem\"></span><button id=\"pro\" class=\"pri\">⚡ Pro</button><button id=\"clr\">🗑</button></header>\n<div id=\"msgs\"></div>\n<form id=\"f\"><textarea id=\"t\" rows=\"1\" placeholder=\"Hỏi LGPT bất cứ điều gì…\"></textarea><button class=\"pri\" id=\"send\">Gửi</button></form>\n<div id=\"ov\" class=\"ov hide\"><div><h3 style=\"margin:0 0 6px\" id=\"ovT\">Mở LGPT Pro 24 giờ</h3>\n <div style=\"color:var(--mut);font-size:14px\" id=\"ovD\">Xem một quảng cáo để mở Pro: nhiều tin nhắn hơn và câu trả lời dài hơn.</div>\n <div id=\"adslot\" style=\"margin:12px 0;min-height:90px;border:1px dashed var(--line);border-radius:12px;display:grid;place-items:center;color:var(--mut);font-size:13px\">[Chỗ gắn quảng cáo của bạn]</div>\n <div style=\"display:flex;gap:8px\"><button id=\"ovX\" style=\"flex:1\">Đóng</button><button id=\"ovOk\" class=\"pri\" style=\"flex:1\">Tôi đã xem xong</button></div><div id=\"ovM\" style=\"color:#ff6b81;font-size:13px;margin-top:8px\"></div></div></div>\n<script>\nconst $=s=>document.querySelector(s);\nlet H=JSON.parse(localStorage.getItem('lg')||'[]'),busy=false;\nconst esc=s=>s.replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nfunction inline(s){return esc(s).replace(/`([^`\\n]+)`/g,'<code class=\"i\">$1</code>').replace(/\\*\\*([^*\\n]+)\\*\\*/g,'<b>$1</b>').replace(/(https?:\\/\\/[^\\s<)]+)/g,'<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\">$1</a>')}\nfunction md(t){const out=[];const parts=t.split(/```/);\n parts.forEach((p,i)=>{if(i%2===0){out.push(inline(p).replace(/\\n/g,'<br>'));return}\n  const nl=p.indexOf('\\n'),lang=nl>=0?p.slice(0,nl).trim():'',code=nl>=0?p.slice(nl+1):p;\n  if(lang==='svg'&&/<\\/svg>\\s*$/.test(code)){out.push(`<div class=\"svg\"><img alt=\"ảnh\" src=\"data:image/svg+xml;charset=utf-8,${encodeURIComponent(code)}\"><div><button data-dl=\"${i}\" onclick=\"dl(this)\">⬇ Tải ảnh SVG</button></div></div>`);window['_s'+i]=code;return}\n  out.push(`<pre><button onclick=\"cp(this)\">Sao chép</button><code>${esc(code.replace(/\\n$/,''))}</code></pre>`)});\n return out.join('')}\nfunction cp(b){navigator.clipboard.writeText(b.nextSibling.textContent);b.textContent='Đã chép ✓';setTimeout(()=>b.textContent='Sao chép',1200)}\nfunction dl(b){const i=b.dataset.dl,a=document.createElement('a');a.href=URL.createObjectURL(new Blob([window['_s'+i]],{type:'image/svg+xml'}));a.download='lgpt.svg';a.click()}\nfunction draw(){const m=$('#msgs');m.innerHTML='';\n if(!H.length)m.innerHTML=`<div class=\"m a\"><div class=\"b\">Xin chào! Mình là <b>LGPT</b> 👋 Hỏi mình bất cứ điều gì: viết code, giải bài, dịch, phân tích, tạo ảnh vector…<div class=\"chips\"><button onclick=\"ask('Viết cho tôi game rắn săn mồi bằng HTML')\">🎮 Viết game</button><button onclick=\"ask('Tạo ảnh SVG con mèo phi hành gia dễ thương')\">🎨 Tạo ảnh</button><button onclick=\"ask('Giải thích cách phân tích file game để làm mod hợp pháp')\">🔧 Mod game</button></div></div></div>`;\n H.forEach(x=>{const d=document.createElement('div');d.className='m '+(x.role==='user'?'u':'a');d.innerHTML=`<div class=\"b\">${x.role==='user'?esc(x.content):md(x.content)}</div>`;m.appendChild(d)});m.scrollTop=m.scrollHeight}\nfunction ask(q){$('#t').value=q;$('#f').requestSubmit()}\n$('#f').onsubmit=async e=>{e.preventDefault();const q=$('#t').value.trim();if(!q||busy)return;$('#t').value='';busy=true;H.push({role:'user',content:q});H.push({role:'assistant',content:''});draw();\n const last=$('#msgs').lastChild.firstChild;last.innerHTML='<span class=\"dot\"></span><span class=\"dot\"></span><span class=\"dot\"></span>';\n try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:H.slice(0,-1).slice(-30)})});\n  if(r.status===429){H.pop();H.pop();draw();throw new Error('Máy chủ đang giới hạn yêu cầu. Hãy thử lại sau.')}\n  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||'Lỗi máy chủ')}\n  \n  const rd=r.body.getReader(),dc=new TextDecoder();let buf='',acc='';\n  for(;;){const{done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});const ls=buf.split('\\n\\n');buf=ls.pop();\n   for(const l of ls){if(!l.startsWith('data: '))continue;const j=JSON.parse(l.slice(6));if(j.t){acc+=j.t;H[H.length-1].content=acc;last.innerHTML=md(acc);$('#msgs').scrollTop=$('#msgs').scrollHeight}if(j.e)throw new Error(j.e)}}\n }catch(err){H[H.length-1].content='⚠️ '+err.message}\n localStorage.setItem('lg',JSON.stringify(H.slice(-60)));busy=false;draw()};\n$('#t').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&innerWidth>700){e.preventDefault();$('#f').requestSubmit()}});\nfunction rem(v){$('#rem').textContent=proTok&&v==='pro'?'⚡ Pro đang bật':v?`Còn ${v} lượt hôm nay`:''}\n$('#clr').onclick=()=>{H=[];localStorage.removeItem('lg');draw()};\n$('#pro').onclick=()=>{$('#ovD').textContent='Xem một quảng cáo để mở Pro: nhiều tin nhắn hơn và câu trả lời dài hơn.';$('#ov').classList.remove('hide')};\n$('#ovX').onclick=()=>$('#ov').classList.add('hide');\n$('#ovOk').onclick=async()=>{$('#ovM').textContent='';try{const r=await fetch('/api/pro',{method:'POST'});const j=await r.json();if(!r.ok)throw new Error(j.error);proTok=j.token;$('#ov').classList.add('hide');}catch(e){$('#ovM').textContent=e.message}};\nfetch('/api/status',{headers:{'x-pro':proTok}}).then(r=>r.json()).then(j=>rem(j.pro?'pro':j.left)).catch(()=>{});\ndraw();\n</script></body></html>\n";
+const KEY = process.env.ANTHROPIC_API_KEY;
+const MODEL = process.env.MODEL || 'claude-sonnet-5-5';
+const SYSTEM = `Bạn là LGPT, trợ lý AI trả lời mọi câu hỏi bằng đúng ngôn ngữ của người dùng (mặc định tiếng Việt).
+- Khi được yêu cầu viết code: viết code hoàn chỉnh, chạy được, đặt trong khối \`\`\`ngôn_ngữ. Tự đưa ra giả định hợp lý, KHÔNG hỏi ngược lại trừ khi thật sự bất khả thi.
+- Khi người dùng muốn "tạo ảnh/vẽ": trả về MỘT ảnh SVG hoàn chỉnh (có viewBox, nét, đẹp) trong khối \`\`\`svg và không nói gì thêm ngoài một câu ngắn.
+- Dịch ngược/phân tích phần mềm và game: giải thích kỹ thuật cho mục đích hợp pháp (mod, tương thích, học tập, bảo mật, khôi phục mã của chính bạn). Không giúp bẻ khóa bản quyền, crack, hack/gian lận game online hay phát tán bản lậu.
+- Gửi liên kết dạng URL đầy đủ khi cần, chỉ những liên kết bạn chắc chắn tồn tại.
+- Từ chối nội dung gây hại, lừa đảo, thu thập thông tin cá nhân/ngân hàng trái phép.`;
 
-let DATA = BASE.map((e) => [e[0], e[1], e[2].split(' ').join('|'), 100]);
-let ready = false, status = 'Đang nạp dữ liệu từ Wikidata…';
-let LEARN = [];
-try { LEARN = JSON.parse(fs.readFileSync(LFILE, 'utf8')); } catch {}
-try {
-  const c = JSON.parse(fs.readFileSync(CACHE, 'utf8'));
-  if (c.t > Date.now() - 7 * 864e5 && c.d.length > 300) { DATA = c.d; ready = true; status = 'Dữ liệu từ bộ nhớ đệm'; }
-} catch {}
 
-let BUF = null;
-function rebuild() {
-  const d = [...DATA, ...LEARN];
-  BUF = zlib.gzipSync(JSON.stringify({ ready, status, n: d.length, d }));
-}
-rebuild();
-
-/* ============ Tải Wikidata ============ */
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function sparql(q, retry = 1) {
-  const url = 'https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q);
-  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' }, signal: AbortSignal.timeout(70000) });
-  if (r.status === 429 && retry > 0) { await sleep(30000); return sparql(q, retry - 1); }
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return (await r.json()).results.bindings;
-}
-const OCC = [['Q33999', 'diễn viên'], ['Q10800557', 'diễn viên điện ảnh'], ['Q10798782', 'diễn viên truyền hình'], ['Q177220', 'ca sĩ'], ['Q639669', 'nhạc sĩ'],
-  ['Q36834', 'nhà soạn nhạc'], ['Q937857', 'cầu thủ bóng đá'], ['Q3665646', 'cầu thủ bóng rổ'], ['Q10833314', 'tay vợt'], ['Q2066131', 'vận động viên'],
-  ['Q82955', 'chính trị gia'], ['Q372436', 'chính khách'], ['Q116', 'vua / nữ hoàng'], ['Q47064', 'quân nhân'], ['Q901', 'nhà khoa học'], ['Q169470', 'nhà vật lý'],
-  ['Q170790', 'nhà toán học'], ['Q205375', 'nhà phát minh'], ['Q4964182', 'triết gia'], ['Q36180', 'nhà văn'], ['Q49757', 'nhà thơ'], ['Q1028181', 'họa sĩ'],
-  ['Q2526255', 'đạo diễn phim'], ['Q43845', 'doanh nhân'], ['Q1930187', 'nhà báo']];
-const KINDS = [['Q15632617', 'hư cấu (người)'], ['Q95074', 'hư cấu'], ['Q1114461', 'truyện tranh'], ['Q15711870', 'hoạt hình'],
-  ['Q15773347', 'phim'], ['Q15773317', 'truyền hình'], ['Q3658341', 'văn học']];
-
-const okLabel = (v) => v && !/^Q\d+$/.test(v) && !v.includes('|') && v.length < 60;
-function addGender(t, r) {
-  const g = r.g && r.g.value;
-  if (g && g.endsWith('Q6581097')) t.add('male'); else if (g && g.endsWith('Q6581072')) t.add('female');
-}
-async function loadWikidata() {
-  const people = new Map(), chars = new Map();
-  const put = (map, r, init) => {
-    const id = r.item.value, name = r.itemLabel && r.itemLabel.value;
-    if (!okLabel(name)) return null;
-    let e = map.get(id);
-    if (!e) { e = { n: name, s: +r.s.value, t: new Set(init) }; map.set(id, e); }
-    return e;
-  };
-  const run = async (q, fn) => {
-    try { (await sparql(q)).forEach(fn); } catch (err) { console.log('Wikidata lỗi:', err.message); }
-    await sleep(2500);
-  };
-  const LBL = 'SERVICE wikibase:label { bd:serviceParam wikibase:language "vi,en". }';
-  for (const [qid, tag] of OCC) {
-    status = 'Đang nạp: ' + tag + '…';
-    await run(`SELECT ?item ?itemLabel ?s ?g ?b ?d ?cLabel WHERE {
-      ?item wdt:P106 wd:${qid}; wikibase:sitelinks ?s. FILTER(?s>=60)
-      OPTIONAL{?item wdt:P21 ?g} OPTIONAL{?item wdt:P569 ?b} OPTIONAL{?item wdt:P570 ?d} OPTIONAL{?item wdt:P27 ?c}
-      ${LBL} } ORDER BY DESC(?s) LIMIT 250`, (r) => {
-      const e = put(people, r, ['real']); if (!e) return;
-      e.t.add('occ:' + tag); addGender(e.t, r);
-      if (r.b) { const y = parseInt(r.b.value, 10); if (!isNaN(y)) { e.t.add(y < 1800 ? 'b:trước 1800' : 'b:' + Math.floor(y / 10) * 10); if (y >= 1800) e.t.add('bc:' + (Math.floor(y / 100) + 1)); } }
-      if (r.d) e.t.add('dead');
-      if (r.cLabel && okLabel(r.cLabel.value)) e.t.add('c:' + r.cLabel.value);
-    });
-  }
-  status = 'Đang nạp: người Việt Nam…';
-  await run(`SELECT ?item ?itemLabel ?s ?g ?b ?d ?oLabel WHERE {
-    ?item wdt:P27 wd:Q881; wdt:P31 wd:Q5; wikibase:sitelinks ?s. FILTER(?s>=8)
-    OPTIONAL{?item wdt:P21 ?g} OPTIONAL{?item wdt:P569 ?b} OPTIONAL{?item wdt:P570 ?d} OPTIONAL{?item wdt:P106 ?o}
-    ${LBL} } ORDER BY DESC(?s) LIMIT 600`, (r) => {
-    const e = put(people, r, ['real']); if (!e) return;
-    e.t.add('c:Việt Nam'); addGender(e.t, r);
-    if (r.b) { const y = parseInt(r.b.value, 10); if (!isNaN(y)) { e.t.add(y < 1800 ? 'b:trước 1800' : 'b:' + Math.floor(y / 10) * 10); if (y >= 1800) e.t.add('bc:' + (Math.floor(y / 100) + 1)); } }
-    if (r.d) e.t.add('dead');
-    if (r.oLabel && okLabel(r.oLabel.value)) e.t.add('occ:' + r.oLabel.value);
-  });
-  for (const [qid, kind] of KINDS) {
-    status = 'Đang nạp nhân vật ' + kind + '…';
-    await run(`SELECT ?item ?itemLabel ?s ?g ?uLabel ?wLabel WHERE {
-      ?item wdt:P31 wd:${qid}; wikibase:sitelinks ?s. FILTER(?s>=20)
-      OPTIONAL{?item wdt:P21 ?g} OPTIONAL{?item wdt:P1080 ?u} OPTIONAL{?item wdt:P1441 ?w}
-      ${LBL} } ORDER BY DESC(?s) LIMIT 300`, (r) => {
-      const e = put(chars, r, []); if (!e) return;
-      e.t.add('k:' + kind); addGender(e.t, r);
-      if (r.uLabel && okLabel(r.uLabel.value)) e.t.add('u:' + r.uLabel.value);
-      if (r.wLabel && okLabel(r.wLabel.value)) e.t.add('w:' + r.wLabel.value);
-    });
-  }
-  const out = [];
-  const emit = (map, emojiFn) => map.forEach((e) => {
-    if (e.s >= 150) e.t.add('fame');
-    out.push([e.n, emojiFn(e), [...e.t].join('|'), e.s]);
-  });
-  emit(people, (e) => (e.t.has('male') ? '👨' : e.t.has('female') ? '👩' : '🧑'));
-  emit(chars, () => '🎭');
-  if (out.length > 300) {
-    DATA = out; ready = true; status = 'Đã nạp xong từ Wikidata';
-    fs.writeFile(CACHE, JSON.stringify({ t: Date.now(), d: out }), () => {});
-  } else status = 'Không tải được Wikidata, dùng dữ liệu dự phòng';
-  rebuild();
-  console.log(status, '— tổng', out.length);
-}
-
-/* ============ API ============ */
 app.get('/', (req, res) => res.type('html').send(HTML));
 app.get('/health', (req, res) => res.send('ok'));
-app.get('/api/data', (req, res) => {
-  res.set({ 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Cache-Control': 'no-cache' }).send(BUF);
-});
-const hits = {};
-app.post('/api/learn', (req, res) => {
-  const ip = req.ip, now = Date.now();
-  hits[ip] = (hits[ip] || []).filter((t) => t > now - 36e5);
-  if (hits[ip].length >= 5) return res.status(429).json({ error: 'Bạn dạy nhiều quá, thử lại sau.' });
-  const b = req.body || {};
-  const name = String(b.name || '').replace(/[<>|]/g, '').trim().slice(0, 40);
-  const tags = (Array.isArray(b.tags) ? b.tags : []).map((x) => String(x).replace(/\|/g, '').slice(0, 60)).filter(Boolean).slice(0, 60);
-  if (!name || tags.length < 2) return res.status(400).json({ error: 'Thiếu thông tin.' });
-  hits[ip].push(now);
-  LEARN.push([name, '⭐', tags.join('|'), 60]);
-  fs.writeFile(LFILE, JSON.stringify(LEARN), () => {});
-  rebuild();
-  res.json({ ok: true });
+app.get('/api/status', (req, res) => res.json({ unlimited: true })); res.json({ pro: q.pro, left: Math.max(0, q.max - q.u.n) }); });
+
+
+app.post('/api/chat', async (req, res) => {
+  if (!KEY) return res.status(500).json({ error: 'Máy chủ chưa có ANTHROPIC_API_KEY.' });
+  // Không giới hạn lượt ở tầng ứng dụng.
+  // Giới hạn/chi phí thực tế của nhà cung cấp AI vẫn áp dụng.
+  const msgs = (Array.isArray(req.body.messages) ? req.body.messages : [])
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-30).map((m) => ({ role: m.role, content: m.content.slice(0, 20000) }));
+  if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return res.status(400).json({ error: 'Tin nhắn không hợp lệ.' });
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'x-remaining': 'unlimited' });
+  res.flushHeaders && res.flushHeaders();
+  const send = (o) => res.write('data: ' + JSON.stringify(o) + '\n\n');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 8000, stream: true, system: SYSTEM, messages: msgs }),
+    });
+    if (!r.ok) { send({ e: 'Lỗi từ AI (' + r.status + '). Hãy thử lại.' }); return res.end(); }
+    const dec = new TextDecoder(); let buf = '';
+    for await (const chunk of r.body) {
+      buf += dec.decode(chunk, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const l of lines) {
+        if (!l.startsWith('data: ')) continue;
+        try { const j = JSON.parse(l.slice(6)); if (j.type === 'content_block_delta' && j.delta && j.delta.type === 'text_delta') send({ t: j.delta.text }); } catch {}
+      }
+    }
+  } catch (e) { send({ e: 'Mất kết nối tới AI.' }); }
+  res.end();
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log('Genie chạy tại cổng ' + PORT);
-  if (!ready) loadWikidata().catch((e) => console.log('Lỗi nạp dữ liệu:', e.message));
-});
+app.listen(PORT, () => console.log('LGPT chạy tại cổng ' + PORT));
